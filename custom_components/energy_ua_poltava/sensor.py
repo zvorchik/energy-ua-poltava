@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, date, time as dtime, timedelta
+from datetime import datetime, time as dtime, timedelta
 from typing import Any, Dict, Optional, List, Tuple
 
 try:
@@ -48,7 +48,7 @@ STATUS_OFF_PHRASES = [
 
 # Regex: intervals like "З 12:30 до 16:00, тривалість ..."
 OFF_INTERVAL_RE = re.compile(r"З\s*(\d{1,2}:\d{2})\s*до\s*(\d{1,2}:\d{2})", re.IGNORECASE)
-HMS_RE = re.compile(r"(?:(\d+)\s*(?:год|г))?\s*(?:(\d+)\s*хв)?\s*(?:(\д+)\s*(?:сек|с))?", re.IGNORECASE)
+HMS_RE = re.compile(r"(?:(\d+)\s*(?:год|г|год\.|г\.|h))?\s*(?:(\d+)\s*(?:хв|хв\.|m))?\s*(?:(\d+)\s*(?:сек|с|сек\.|s))?", re.IGNORECASE)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     group = entry.data.get(CONF_GROUP)
@@ -128,7 +128,7 @@ class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             data[SENSOR_KEY_TEXT] = text_value
 
         # Detection text for status & fallbacks
-        detection_text = text_value or soup.get_text(separator=' 
+        detection_text = text_value or soup.get_text(separator='
 ', strip=True)
 
         # --- STATUS ---

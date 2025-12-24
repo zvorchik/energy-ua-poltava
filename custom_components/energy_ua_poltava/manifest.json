@@ -1,7 +1,7 @@
 {
   "domain": "energy_ua_poltava",
   "name": "Energy UA Poltava",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "documentation": "https://github.com/zvorchik/energy-ua-poltava",
   "requirements": [
     "beautifulsoup4>=4.9.3"
