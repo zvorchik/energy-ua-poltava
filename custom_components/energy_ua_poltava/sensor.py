@@ -27,6 +27,7 @@ from .const import (
     SENSOR_KEY_TEXT,
     SENSOR_KEY_TIME,
     CONF_GROUP,
+    USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     session = async_get_clientsession(hass)
     coordinator = EnergyUATimerCoordinator(hass, session, url, timedelta(seconds=scan_seconds))
     await coordinator.async_refresh()
-    async_add_entities([EnergyUATextSensor(coordinator, url), EnergyUATimeSensor(coordinator, url)])
+    async_add_entities([
+        EnergyUATextSensor(coordinator, url),
+        EnergyUATimeSensor(coordinator, url),
+        EnergyUACombinedSensor(coordinator, url, group),
+    ])
 
 class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, session, url: str, scan_interval: timedelta):
@@ -48,7 +53,7 @@ class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _async_update_data(self) -> Dict[str, Any]:
         try:
-            async with self._session.get(self._url, timeout=20) as resp:
+            async with self._session.get(self._url, timeout=20, headers={'User-Agent': USER_AGENT}) as resp:
                 html = await resp.text()
         except Exception as err:
             raise UpdateFailed(f"Energy UA fetch error: {err}") from err
@@ -75,6 +80,12 @@ class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 s = int(m.group(3) or 0)
                 seconds = h * 3600 + mn * 60 + s
 
+        # Фолбек: інколи текст містить час без окремого елемента
+        if seconds is None and data[SENSOR_KEY_TEXT]:
+            m = re.search(r"(\d+)\s*год.*?(\d+)\s*хв.*?(\d+)\s*сек", data[SENSOR_KEY_TEXT], flags=re.IGNORECASE)
+            if m:
+                seconds = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3))
+
         data[SENSOR_KEY_TIME] = seconds
         return data
 
@@ -95,17 +106,31 @@ class BaseEnergyUASensor(CoordinatorEntity[EnergyUATimerCoordinator], SensorEnti
 class EnergyUATextSensor(BaseEnergyUASensor):
     def __init__(self, coordinator: EnergyUATimerCoordinator, url: str):
         super().__init__(coordinator, url, 'ch_timer_text', 'mdi:format-text')
-
     @property
     def native_value(self):
         return (self.coordinator.data or {}).get(SENSOR_KEY_TEXT)
 
 class EnergyUATimeSensor(BaseEnergyUASensor):
     _attr_native_unit_of_measurement = 's'
-
     def __init__(self, coordinator: EnergyUATimerCoordinator, url: str):
         super().__init__(coordinator, url, 'ch_timer_time', 'mdi:timer-outline')
-
     @property
     def native_value(self):
         return (self.coordinator.data or {}).get(SENSOR_KEY_TIME)
+
+class EnergyUACombinedSensor(BaseEnergyUASensor):
+    _attr_native_unit_of_measurement = 's'
+    def __init__(self, coordinator: EnergyUATimerCoordinator, url: str, group: str):
+        super().__init__(coordinator, url, 'ch_timer', 'mdi:timer')
+        self._group = group
+    @property
+    def native_value(self):
+        return (self.coordinator.data or {}).get(SENSOR_KEY_TIME)
+    @property
+    def extra_state_attributes(self):
+        d = self.coordinator.data or {}
+        return {
+            'text': d.get(SENSOR_KEY_TEXT),
+            'group': self._group,
+            'source': self._url,
+        }
