@@ -1,7 +1,7 @@
 {
   "domain": "energy_ua_poltava",
   "name": "Energy UA Poltava",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://github.com/zvorchik/energy-ua-poltava",
   "requirements": [
     "beautifulsoup4>=4.9.3"
@@ -10,5 +10,6 @@
   "codeowners": [
     "@zvorchik"
   ],
-  "iot_class": "cloud_polling"
+  "iot_class": "cloud_polling",
+  "config_flow": true
 }
