@@ -14,7 +14,7 @@ async def async_setup(hass: HomeAssistant, config):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
-    # Compatibility shim: new API (2024+) vs old (2022.5)
+    # Compatibility shim for HA 2022.5.x vs newer
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except AttributeError:
