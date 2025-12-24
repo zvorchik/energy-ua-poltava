@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="81b3b58b-5369-48eb-874c-990136bb930f" name="Changes" comment="0.4">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/__init__.py" afterDir="false" />
-    </list>
+    <list default="true" id="81b3b58b-5369-48eb-874c-990136bb930f" name="Changes" comment="0.5" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -73,7 +70,7 @@
       <updated>1766574921523</updated>
       <workItem from="1766574922983" duration="935000" />
       <workItem from="1766576610001" duration="2797000" />
-      <workItem from="1766582753298" duration="7000" />
+      <workItem from="1766582753298" duration="46000" />
     </task>
     <task id="LOCAL-00001" summary="0.0.1">
       <option name="closed" value="true" />
@@ -99,7 +96,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766577789914</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="0.5">
+      <option name="closed" value="true" />
+      <created>1766582773788</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1766582773788</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -126,6 +131,7 @@
     <MESSAGE value="0.0.1" />
     <MESSAGE value="0.0.2" />
     <MESSAGE value="0.4" />
-    <option name="LAST_COMMIT_MESSAGE" value="0.4" />
+    <MESSAGE value="0.5" />
+    <option name="LAST_COMMIT_MESSAGE" value="0.5" />
   </component>
 </project>

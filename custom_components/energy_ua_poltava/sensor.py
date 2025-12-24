@@ -26,11 +26,20 @@ from .const import (
     DEFAULT_SCAN_SECONDS,
     SENSOR_KEY_TEXT,
     SENSOR_KEY_TIME,
+    SENSOR_KEY_STATUS,
     CONF_GROUP,
     USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+STATUS_ON_PHRASES = [
+    "Наступне відключення заплановане через",
+]
+STATUS_OFF_PHRASES = [
+    "До увімкнення залишилось",
+    "До увімкнення залишилось почекати",
+]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     group = entry.data.get(CONF_GROUP)
@@ -43,6 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         EnergyUATextSensor(coordinator, url),
         EnergyUATimeSensor(coordinator, url),
         EnergyUACombinedSensor(coordinator, url, group),
+        EnergyUAStatusSensor(coordinator, url),
     ])
 
 class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
@@ -58,35 +68,63 @@ class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as err:
             raise UpdateFailed(f"Energy UA fetch error: {err}") from err
 
-        data: Dict[str, Any] = {SENSOR_KEY_TEXT: None, SENSOR_KEY_TIME: None}
+        data: Dict[str, Any] = {SENSOR_KEY_TEXT: None, SENSOR_KEY_TIME: None, SENSOR_KEY_STATUS: None}
         soup = BeautifulSoup(html, 'html.parser')
 
-        text_el = soup.find(id=SENSOR_KEY_TEXT)
-        if text_el:
-            data[SENSOR_KEY_TEXT] = text_el.get_text(strip=True)
+        # --- TEXT & STATUS ---
+        text_div = soup.find('div', class_='ch_timer_text')
+        text_value: Optional[str] = None
+        if text_div:
+            text_value = text_div.get_text(separator=' ', strip=True)
+            data[SENSOR_KEY_TEXT] = text_value
 
-        time_el = soup.find(id=SENSOR_KEY_TIME)
-        raw_time = time_el.get_text(strip=True) if time_el else None
+        # Determine status based on phrases
+        status: Optional[str] = None
+        detection_text = text_value or soup.get_text(separator=' ', strip=True)
+        if any(p in detection_text for p in STATUS_ON_PHRASES):
+            status = 'ON'
+        elif any(p in detection_text for p in STATUS_OFF_PHRASES):
+            status = 'OFF'
+        # Secondary hints
+        elif 'Електроенергія присутня' in detection_text:
+            status = 'ON'
+        elif 'Електроенергія відсутня' in detection_text:
+            status = 'OFF'
+        data[SENSOR_KEY_STATUS] = status
+
+        # --- TIME (from ids: hours, minutes, seconds inside .ch_timer_time) ---
         seconds: Optional[int] = None
+        time_div = soup.find('div', class_='ch_timer_time')
+        if time_div:
+            try:
+                h_el = time_div.find(id='hours')
+                m_el = time_div.find(id='minutes')
+                s_el = time_div.find(id='seconds')
+                h = int((h_el.get_text(strip=True) if h_el else '0') or 0)
+                m = int((m_el.get_text(strip=True) if m_el else '0') or 0)
+                s = int((s_el.get_text(strip=True) if s_el else '0') or 0)
+                seconds = h * 3600 + m * 60 + s
+            except Exception as parse_err:
+                _LOGGER.debug("Energy UA: time parse error: %s", parse_err)
+                seconds = None
 
-        if raw_time and raw_time.isdigit():
-            seconds = int(raw_time)
-        else:
-            pattern = re.compile(r"(?:(\d+)\s*(?:год|г))?.*?(?:(\d+)\s*(?:хв))?.*?(?:(\d+)\s*(?:сек|с))?", flags=re.IGNORECASE | re.DOTALL)
-            m = pattern.search(raw_time or '')
-            if m:
+        # Fallback: parse any H:M:S pattern in page text if needed
+        if seconds is None:
+            page_text = detection_text
+            pattern = re.compile(r"(?:(\d+)\s*(?:год|г))?\s*(?:(\d+)\s*хв)?\s*(?:(\d+)\s*(?:сек|с))?", re.IGNORECASE)
+            m = pattern.search(page_text)
+            if m and (m.group(1) or m.group(2) or m.group(3)):
                 h = int(m.group(1) or 0)
                 mn = int(m.group(2) or 0)
                 s = int(m.group(3) or 0)
                 seconds = h * 3600 + mn * 60 + s
 
-        # Фолбек: інколи текст містить час без окремого елемента
-        if seconds is None and data[SENSOR_KEY_TEXT]:
-            m = re.search(r"(\d+)\s*год.*?(\d+)\s*хв.*?(\d+)\s*сек", data[SENSOR_KEY_TEXT], flags=re.IGNORECASE)
-            if m:
-                seconds = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3))
-
         data[SENSOR_KEY_TIME] = seconds
+
+        # Debug aid if not found
+        if data[SENSOR_KEY_TEXT] is None and data[SENSOR_KEY_TIME] is None:
+            _LOGGER.debug("Energy UA: expected content not found. HTML head: %s", html[:1000])
+
         return data
 
 class BaseEnergyUASensor(CoordinatorEntity[EnergyUATimerCoordinator], SensorEntity):
@@ -118,6 +156,13 @@ class EnergyUATimeSensor(BaseEnergyUASensor):
     def native_value(self):
         return (self.coordinator.data or {}).get(SENSOR_KEY_TIME)
 
+class EnergyUAStatusSensor(BaseEnergyUASensor):
+    def __init__(self, coordinator: EnergyUATimerCoordinator, url: str):
+        super().__init__(coordinator, url, 'ch_status', 'mdi:power')
+    @property
+    def native_value(self):
+        return (self.coordinator.data or {}).get(SENSOR_KEY_STATUS)
+
 class EnergyUACombinedSensor(BaseEnergyUASensor):
     _attr_native_unit_of_measurement = 's'
     def __init__(self, coordinator: EnergyUATimerCoordinator, url: str, group: str):
@@ -131,6 +176,7 @@ class EnergyUACombinedSensor(BaseEnergyUASensor):
         d = self.coordinator.data or {}
         return {
             'text': d.get(SENSOR_KEY_TEXT),
+            'status': d.get(SENSOR_KEY_STATUS),
             'group': self._group,
             'source': self._url,
         }

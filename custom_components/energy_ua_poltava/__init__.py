@@ -4,7 +4,6 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-
 from .const import DOMAIN
 
 PLATFORMS = [Platform.SENSOR]
@@ -15,19 +14,14 @@ async def async_setup(hass: HomeAssistant, config):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
-
-    # ✔ Сумісність із різними версіями Home Assistant
+    # Compatibility shim: new API (2024+) vs old (2022.5)
     try:
-        # Новий API (HA 2024+): потрібно await
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except AttributeError:
-        # Старий API (HA ≤2023): без await
         hass.config_entries.async_setup_platforms(entry, PLATFORMS)
-
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    # Цей метод існував і в 2022.5, його залишаємо як є
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
