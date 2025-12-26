@@ -1,16 +1,17 @@
 
 from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
 from .const import (
     DOMAIN,
-    CONF_URL,
-    CONF_UPDATE_MINUTES,
+    CONF_GROUP,
+    CONF_SCAN_INTERVAL,
     CONF_PRETRIGGER_MINUTES,
-    DEFAULT_URL,
-    DEFAULT_UPDATE_MINUTES,
+    DEFAULT_GROUP,
+    DEFAULT_SCAN_SECONDS,
     DEFAULT_PRETRIGGER_MINUTES,
 )
 
@@ -19,12 +20,12 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            await self.async_set_unique_id(user_input[CONF_URL])
+            await self.async_set_unique_id(user_input[CONF_GROUP])
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title="EnergyUA Schedule", data=user_input)
         schema = vol.Schema({
-            vol.Required(CONF_URL, default=DEFAULT_URL): str,
-            vol.Required(CONF_UPDATE_MINUTES, default=DEFAULT_UPDATE_MINUTES): vol.All(int, vol.Range(min=1, max=1440)),
+            vol.Required(CONF_GROUP, default=DEFAULT_GROUP): str,
+            vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_SECONDS): vol.All(int, vol.Range(min=10, max=3600)),
             vol.Required(CONF_PRETRIGGER_MINUTES, default=DEFAULT_PRETRIGGER_MINUTES): vol.All(int, vol.Range(min=1, max=180)),
         })
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -45,7 +46,7 @@ class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
         options = self.config_entry.options
         schema = vol.Schema({
-            vol.Required(CONF_UPDATE_MINUTES, default=options.get(CONF_UPDATE_MINUTES, DEFAULT_UPDATE_MINUTES)): vol.All(int, vol.Range(min=1, max=1440)),
+            vol.Required(CONF_SCAN_INTERVAL, default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_SECONDS)): vol.All(int, vol.Range(min=10, max=3600)),
             vol.Required(CONF_PRETRIGGER_MINUTES, default=options.get(CONF_PRETRIGGER_MINUTES, DEFAULT_PRETRIGGER_MINUTES)): vol.All(int, vol.Range(min=1, max=180)),
         })
         return self.async_show_form(step_id="options", data_schema=schema)

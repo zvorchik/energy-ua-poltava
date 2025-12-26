@@ -1,117 +1,143 @@
 
 from __future__ import annotations
 
-import logging, re
-from datetime import timedelta
+import re
+import logging
+from datetime import datetime, time as dtime, timedelta
+from typing import Any, Dict, Optional, List, Tuple
+
 from bs4 import BeautifulSoup
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_URL, CONF_UPDATE_MINUTES, CONF_PRETRIGGER_MINUTES
+from .const import (
+    DOMAIN,
+    DEFAULT_BASE_URL,
+    CONF_GROUP,
+    CONF_SCAN_INTERVAL,
+    CONF_PRETRIGGER_MINUTES,
+    SENSOR_KEY_TEXT,
+    SENSOR_KEY_TIME,
+    SENSOR_KEY_STATUS,
+    USER_AGENT,
+)
 
 _LOGGER = logging.getLogger(__name__)
-TIME_RE = re.compile(r"З\s*(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})")
 
-class EnergyUACoordinator(DataUpdateCoordinator):
+STATUS_ON_PHRASES = ["Наступне відключення заплановане через", "Електроенергія присутня"]
+STATUS_OFF_PHRASES = ["До увімкнення залишилось", "До увімкнення залишилось почекати", "Електроенергія відсутня"]
+
+OFF_INTERVAL_RE = re.compile(r"З\s*(\d{1,2}:\d{2})\s*до\s*(\d{1,2}:\d{2})", re.IGNORECASE)
+HMS_RE = re.compile(r"(\d+)\s*(?:год\.?|h)?\s*(\d+)?\s*(?:хв\.?|m)?\s*(\d+)?\s*(?:сек\.?|s)?", re.IGNORECASE)
+
+class EnergyUATimerCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
         self.entry = entry
-        self.url = entry.data.get(CONF_URL)
-        update_minutes = entry.options.get(CONF_UPDATE_MINUTES, entry.data.get(CONF_UPDATE_MINUTES))
+        self.session = async_get_clientsession(hass)
+        self.group = entry.data.get(CONF_GROUP)
+        scan_seconds = entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL))
         self.pretrigger = entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
+        self.url = f"{DEFAULT_BASE_URL}{self.group}"
         self.last_html = None
-        super().__init__(hass, logger=_LOGGER, name=DOMAIN, update_interval=timedelta(minutes=update_minutes))
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=timedelta(seconds=scan_seconds or 60),
+        )
 
-    async def _async_update_data(self):
-        session = async_get_clientsession(self.hass)
-        periods = []
-        html = ""
+    def _now(self) -> datetime:
+        return dt_util.now()
+
+    def _combine_today(self, ts: str) -> Tuple[datetime, datetime]:
+        h, m = ts.split(":")
+        st = self._now().replace(hour=int(h), minute=int(m), second=0, microsecond=0)
+        return st, st
+
+    @staticmethod
+    def _hms_to_seconds(m: re.Match) -> int:
+        h = int(m.group(1) or 0)
+        mn = int(m.group(2) or 0)
+        s = int(m.group(3) or 0)
+        return h * 3600 + mn * 60 + s
+
+    def _parse_off_intervals(self, page_text: str) -> List[Tuple[datetime, datetime]]:
+        intervals: List[Tuple[datetime, datetime]] = []
+        now = self._now()
+        for m in OFF_INTERVAL_RE.finditer(page_text):
+            start_ts, end_ts = m.group(1), m.group(2)
+            sh, sm = [int(x) for x in start_ts.split(":")]
+            eh, em = [int(x) for x in end_ts.split(":")]
+            sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+            if edt <= sdt:
+                edt = edt + timedelta(days=1)
+            intervals.append((sdt, edt))
+        return sorted(intervals, key=lambda x: x[0])
+
+    async def _async_update_data(self) -> Dict[str, Any]:
         try:
-            async with session.get(self.url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20) as resp:
+            async with self.session.get(self.url, timeout=20, headers={"User-Agent": USER_AGENT}) as resp:
                 html = await resp.text()
-        except Exception as e:
-            _LOGGER.warning("EnergyUA request failed: %s", e)
+        except Exception as err:
+            raise UpdateFailed(f"Energy UA fetch error: {err}")
         self.last_html = html
 
-        if html:
-            soup = BeautifulSoup(html, "html.parser")
+        data: Dict[str, Any] = {SENSOR_KEY_TEXT: None, SENSOR_KEY_TIME: None, SENSOR_KEY_STATUS: None}
+        soup = BeautifulSoup(html, "html.parser")
 
-            # 1) Основний контейнер
-            cont = soup.select_one("div.periods_items")
-            spans = []
-            if cont:
-                spans = cont.find_all("span")
+        # --- TEXT ---
+        text_div = soup.find("div", class_="ch_timer_text")
+        text_val = text_div.get_text(" ", strip=True) if text_div else None
+        data[SENSOR_KEY_TEXT] = text_val
+        detection_text = text_val or soup.get_text(" ", strip=True)
 
-            # 2) Якщо немає контейнера — шукаємо span з двома <b> по всій сторінці
-            if not spans:
-                spans = [sp for sp in soup.find_all("span") if len(sp.find_all("b")) >= 2]
+        # --- STATUS ---
+        status = None
+        if any(p in detection_text for p in STATUS_OFF_PHRASES):
+            status = "OFF"
+        elif any(p in detection_text for p in STATUS_ON_PHRASES):
+            status = "ON"
+        data[SENSOR_KEY_STATUS] = status
 
-            # 3) Парсимо з <b> (надійний спосіб)
-            for sp in spans:
-                b_tags = sp.find_all("b")
-                if len(b_tags) >= 2:
-                    start_s = (b_tags[0].get_text(strip=True) or "").strip()
-                    end_s   = (b_tags[1].get_text(strip=True) or "").strip()
-                    now = dt_util.now()
-                    try:
-                        sh, sm = [int(x) for x in start_s.split(":")]
-                        eh, em = [int(x) for x in end_s.split(":")]
-                    except Exception:
-                        continue
-                    sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
-                    edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
-                    if edt < sdt:
-                        edt = edt + timedelta(days=1)
-                    periods.append({"start": sdt, "end": edt, "text": sp.get_text(" ", strip=True)})
+        # --- TIMER (H/M/S DOM) ---
+        seconds = None
+        t_div = soup.find("div", class_="ch_timer_time")
+        if t_div:
+            try:
+                h_el = t_div.find(id="hours")
+                m_el = t_div.find(id="minutes")
+                s_el = t_div.find(id="seconds")
+                h = int(h_el.get_text(strip=True)) if h_el else 0
+                m = int(m_el.get_text(strip=True)) if m_el else 0
+                s = int(s_el.get_text(strip=True)) if s_el else 0
+                seconds = h * 3600 + m * 60 + s
+            except Exception:
+                seconds = None
 
-            # 4) Якщо все ще порожньо — regex по всьому HTML
-            if not periods:
-                for m in TIME_RE.finditer(soup.get_text(" ", strip=True)):
-                    start_s, end_s = m.group(1), m.group(2)
-                    now = dt_util.now()
-                    try:
-                        sh, sm = [int(x) for x in start_s.split(":")]
-                        eh, em = [int(x) for x in end_s.split(":")]
-                    except Exception:
-                        continue
-                    sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
-                    edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
-                    if edt < sdt:
-                        edt = edt + timedelta(days=1)
-                    periods.append({"start": sdt, "end": edt, "text": f"З {start_s} до {end_s}"})
+        # --- FALLBACK 1: regex H/M/S ---
+        if not seconds:
+            m = HMS_RE.search(detection_text)
+            if m and (m.group(1) or m.group(2) or m.group(3)):
+                seconds = self._hms_to_seconds(m)
 
-        # Обчислення
-        nowdt = dt_util.now()
-        in_outage = False
-        next_change = None
-        for p in periods:
-            s, e = p["start"], p["end"]
-            if s <= nowdt <= e:
-                in_outage = True
-                next_change = e
-                break
-        if not in_outage:
-            for p in periods:
-                s = p["start"]
-                if s > nowdt and (next_change is None or s < next_change):
-                    next_change = s
-        minutes_until = -1
-        countdown_hm = "Невідомо"
-        next_type = None
-        if next_change is not None:
-            minutes_until = int((next_change - nowdt).total_seconds() // 60)
-            countdown_hm = f"{minutes_until//60:02d}:{minutes_until%60:02d}"
-            next_type = "on" if in_outage else "off"
-        pretrigger_on = minutes_until >= 0 and (minutes_until == int(self.pretrigger or 10))
+        # --- FALLBACK 2: intervals 'З HH:MM до HH:MM' ---
+        if not seconds:
+            intervals = self._parse_off_intervals(detection_text)
+            now = self._now()
+            if intervals:
+                current = next(((st, en) for st, en in intervals if st <= now < en), None)
+                if current:
+                    seconds = max(0, int((current[1] - now).total_seconds()))
+                    data[SENSOR_KEY_STATUS] = data[SENSOR_KEY_STATUS] or "OFF"
+                else:
+                    next_off = next(((st, en) for st, en in intervals if st > now), None)
+                    if next_off:
+                        seconds = max(0, int((next_off[0] - now).total_seconds()))
+                        data[SENSOR_KEY_STATUS] = data[SENSOR_KEY_STATUS] or "ON"
 
-        return {
-            "periods": periods,
-            "in_outage": in_outage,
-            "next_change": next_change,
-            "minutes_until": minutes_until,
-            "countdown_hm": countdown_hm,
-            "next_type": next_type,
-            "pretrigger": pretrigger_on,
-        }
+        data[SENSOR_KEY_TIME] = seconds
+        return data

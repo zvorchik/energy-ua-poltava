@@ -6,16 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="81b3b58b-5369-48eb-874c-990136bb930f" name="Changes" comment="0.9.5">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/binary_sensor.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/binary_sensor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/config_flow.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/config_flow.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/coordinator.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/coordinator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/manifest.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/sensor.py" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/sensor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/en.json" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/en.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/ru.json" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/ru.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/uk.json" beforeDir="false" afterPath="$PROJECT_DIR$/custom_components/energy_ua_poltava/translations/uk.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -85,7 +75,7 @@
       <workItem from="1766582753298" duration="46000" />
       <workItem from="1766583574179" duration="4728000" />
       <workItem from="1766738386167" duration="88000" />
-      <workItem from="1766743963339" duration="3549000" />
+      <workItem from="1766743963339" duration="4294000" />
     </task>
     <task id="LOCAL-00001" summary="0.0.1">
       <option name="closed" value="true" />
@@ -183,7 +173,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766746206653</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="0.9.5">
+      <option name="closed" value="true" />
+      <created>1766747849254</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1766747849254</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
