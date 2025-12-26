@@ -1,0 +1,27 @@
+{
+  "title": "EnergyUA Schedule",
+  "config": {
+    "step": {
+      "user": {
+        "title": "EnergyUA Schedule",
+        "description": "Configure EnergyUA outage schedule parser.",
+        "data": {
+          "url": "Queue URL",
+          "update_minutes": "Update interval (minutes)",
+          "pretrigger_minutes": "Pretrigger minutes"
+        }
+      }
+    },
+    "options": {
+      "step": {
+        "options": {
+          "title": "EnergyUA Schedule options",
+          "data": {
+            "update_minutes": "Update interval (minutes)",
+            "pretrigger_minutes": "Pretrigger minutes"
+          }
+        }
+      }
+    }
+  }
+}

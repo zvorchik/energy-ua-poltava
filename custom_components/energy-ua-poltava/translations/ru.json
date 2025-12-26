@@ -1,0 +1,27 @@
+{
+  "title": "График EnergyUA",
+  "config": {
+    "step": {
+      "user": {
+        "title": "График EnergyUA",
+        "description": "Настройте парсер графика отключений с Energy-UA.",
+        "data": {
+          "url": "URL очереди",
+          "update_minutes": "Интервал обновления (мин)",
+          "pretrigger_minutes": "Минуты для претриггера"
+        }
+      }
+    },
+    "options": {
+      "step": {
+        "options": {
+          "title": "Параметры EnergyUA",
+          "data": {
+            "update_minutes": "Интервал обновления (мин)",
+            "pretrigger_minutes": "Минуты для претриггера"
+          }
+        }
+      }
+    }
+  }
+}
