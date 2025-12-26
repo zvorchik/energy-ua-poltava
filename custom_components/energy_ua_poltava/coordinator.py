@@ -1,22 +1,13 @@
 
 from __future__ import annotations
-
-import re
-import logging
+import re, logging
 from datetime import timedelta
-
 from bs4 import BeautifulSoup
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
-
-from .const import (
-    DOMAIN,
-    CONF_URL,
-    CONF_UPDATE_MINUTES,
-    CONF_PRETRIGGER_MINUTES,
-)
+from .const import DOMAIN, CONF_URL, CONF_UPDATE_MINUTES, CONF_PRETRIGGER_MINUTES
 
 _LOGGER = logging.getLogger(__name__)
 TIME_RE = re.compile(r"(\d{2}:\d{2}).*?(\d{2}:\d{2})")
@@ -28,29 +19,20 @@ class EnergyUACoordinator(DataUpdateCoordinator):
         self.url = entry.data.get(CONF_URL)
         update_minutes = entry.options.get(CONF_UPDATE_MINUTES, entry.data.get(CONF_UPDATE_MINUTES))
         self.pretrigger = entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
-        super().__init__(
-            hass,
-            logger=_LOGGER,
-            name=DOMAIN,
-            update_interval=timedelta(minutes=update_minutes),
-        )
-
+        super().__init__(hass, logger=_LOGGER, name=DOMAIN, update_interval=timedelta(minutes=update_minutes))
     async def _async_update_data(self):
         session = async_get_clientsession(self.hass)
-        periods = []
-        html = ""
+        periods, html = [], ""
         try:
             async with session.get(self.url, timeout=20) as resp:
                 html = await resp.text()
         except Exception as e:
             _LOGGER.warning("EnergyUA request failed: %s", e)
-
         if html:
             soup = BeautifulSoup(html, "html.parser")
             cont = soup.select_one("div.periods_items")
             if cont:
-                spans = cont.find_all("span")
-                for sp in spans:
+                for sp in cont.find_all("span"):
                     text = sp.get_text(" ", strip=True)
                     m = TIME_RE.search(text)
                     if not m:
@@ -61,13 +43,12 @@ class EnergyUACoordinator(DataUpdateCoordinator):
                         eh, em = [int(x) for x in end_s.split(":")]
                     except Exception:
                         continue
-                    now = dt_util.now()  # aware in HA local timezone
+                    now = dt_util.now()
                     sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
                     edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
                     if edt < sdt:
                         edt = edt + timedelta(days=1)
                     periods.append({"start": sdt, "end": edt, "text": text})
-
         nowdt = dt_util.now()
         in_outage = False
         next_change = None
@@ -82,19 +63,14 @@ class EnergyUACoordinator(DataUpdateCoordinator):
                 s = p["start"]
                 if s > nowdt and (next_change is None or s < next_change):
                     next_change = s
-
         minutes_until = -1
         countdown_hm = "unknown"
         next_type = None
         if next_change is not None:
             minutes_until = int((next_change - nowdt).total_seconds() // 60)
-            h = minutes_until // 60
-            m = minutes_until % 60
-            countdown_hm = f"{h:02d}:{m:02d}"
+            countdown_hm = f"{minutes_until//60:02d}:{minutes_until%60:02d}"
             next_type = "on" if in_outage else "off"
-
         pretrigger_on = minutes_until >= 0 and (minutes_until == int(self.pretrigger or 10))
-
         return {
             "periods": periods,
             "in_outage": in_outage,

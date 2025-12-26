@@ -1,5 +1,5 @@
 
-DOMAIN = "energyua_schedule"
+DOMAIN = "energy_ua_poltava"
 DEFAULT_URL = "https://energy-ua.info/cherga/3-1"
 DEFAULT_UPDATE_MINUTES = 15
 DEFAULT_PRETRIGGER_MINUTES = 10
