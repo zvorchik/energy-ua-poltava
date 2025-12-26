@@ -3,11 +3,10 @@ from __future__ import annotations
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
+async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     entities = [
         EnergyUAPowerState(coordinator, entry.entry_id),
@@ -30,7 +29,6 @@ class EnergyUAPowerState(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self):
-        # is_on=True означает есть свет (не outage)
         return not self.coordinator.data.get("in_outage")
 
 class EnergyUAPretrigger(CoordinatorEntity, BinarySensorEntity):

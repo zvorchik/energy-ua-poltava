@@ -1,37 +1,32 @@
 
-# EnergyUA Schedule (HACS Integration)
+# EnergyUA Schedule (HACS Integration) — HA 2022.5.x совместимый
 
-Интеграция Home Assistant для парсинга графика отключений с сайта Energy-UA и вычисления:
-- текущего состояния света (есть/нет → `on/off`),
+Интеграция Home Assistant (совместима с **2022.5.5**) для парсинга графика отключений с Energy-UA и вычисления:
+- текущего состояния света (`on/off`),
 - таймера до ближайшего изменения (формат `HH:MM`, без секунд),
 - минут до ближайшего изменения,
 - типа следующего изменения (`off` — отключение, `on` — включение),
 - бинарного претриггера «ровно за N минут до изменения».
 
-## Возможности
-- Настройка **через UI** (Config Flow): URL страницы очереди (по умолчанию `https://energy-ua.info/cherga/3-1`), период обновления, и N минут для претриггера.
-- Корректная обработка интервалов, пересекающих полночь.
-- Использует локальное время Home Assistant.
+## Установка через HACS
+1. Поместите содержимое этого архива в Git-репозиторий.
+2. В HACS → Integrations → `⋮` → **Custom repositories** → добавьте URL вашего репозитория (Type: Integration).
+3. Установите **EnergyUA Schedule** из HACS.
+4. В Home Assistant: **Settings → Devices & Services → Add Integration** → выберите **EnergyUA Schedule** и настройте.
 
-## Установка (через HACS)
-1. В HACS → **Integrations** → кликните `⋮` → **Custom repositories**.
-2. Добавьте кастомный репозиторий (тип **Integration**): URL вашего репо, куда вы положите содержимое этого архива.
-3. Найдите **EnergyUA Schedule** в списке интеграций HACS и установите.
-4. В Home Assistant: **Settings → Devices & Services → Add Integration** → найдите **EnergyUA Schedule** и добавьте.
-
-## Настройка
-- **URL очереди**: например, `https://energy-ua.info/cherga/3-1` (замените на вашу чергу/підгрупу).
-- **Интервал обновления**: каждые X минут (по умолчанию 15).
-- **Минуты для претриггера**: N минут до изменения (по умолчанию 10).
+## Настройки (UI)
+- **Queue URL**: по умолчанию `https://energy-ua.info/cherga/3-1`.
+- **Update interval (minutes)**: период опроса (по умолчанию 15).
+- **Pretrigger minutes**: за сколько минут до изменения выставлять претриггер (по умолчанию 10).
 
 ## Создаваемые сущности
-- `sensor.energyua_minutes_until_next_change` — целое число минут до ближайшего изменения.
-  - атрибут `countdown_hm` — таймер `HH:MM` (без секунд).
-  - атрибут `next_change_type` — `off` (отключение) / `on` (включение).
-  - атрибут `periods` — список интервалов на текущую дату.
-- `sensor.energyua_countdown_hm` — строка `HH:MM` (дублирует атрибут, удобно для UI).
+- `sensor.energyua_minutes_until_next_change` — минуты до ближайшего изменения.
+  - атрибуты: `countdown_hm` (HH:MM), `next_change_type` (`off`/`on`), `periods` (текстовые интервалы).
+- `sensor.energyua_countdown_hm` — строка HH:MM.
 - `binary_sensor.energyua_power_state_now` — есть свет сейчас? (`on`/`off`).
-- `binary_sensor.energyua_pretrigger` — претриггер «ровно за N минут до изменения» (`on`/`off`).
+- `binary_sensor.energyua_pretrigger` — претриггер (`on`/`off`).
 
-## Лицензия
-MIT.
+## Примечания
+- Обработка интервалов через полночь: если `конец < начало`, конец переносится на следующий день.
+- Используется локальное время HA.
+- Зависимость: `beautifulsoup4`.

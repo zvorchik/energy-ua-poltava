@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+import logging
+from datetime import timedelta
 
 from bs4 import BeautifulSoup
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -15,38 +16,34 @@ from .const import (
     CONF_URL,
     CONF_UPDATE_MINUTES,
     CONF_PRETRIGGER_MINUTES,
-    ATTR_PERIODS,
-    ATTR_COUNTDOWN_HM,
-    ATTR_NEXT_CHANGE_TYPE,
 )
 
+_LOGGER = logging.getLogger(__name__)
 TIME_RE = re.compile(r"(\d{2}:\d{2}).*?(\d{2}:\d{2})")
 
 class EnergyUACoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
         self.entry = entry
-        url = entry.data.get(CONF_URL)
+        self.url = entry.data.get(CONF_URL)
         update_minutes = entry.options.get(CONF_UPDATE_MINUTES, entry.data.get(CONF_UPDATE_MINUTES))
         self.pretrigger = entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
-        self.url = url
-        self.update_interval = timedelta(minutes=update_minutes)
         super().__init__(
             hass,
-            logger=hass.logger,
+            logger=_LOGGER,
             name=DOMAIN,
-            update_interval=self.update_interval,
+            update_interval=timedelta(minutes=update_minutes),
         )
 
     async def _async_update_data(self):
         session = async_get_clientsession(self.hass)
         periods = []
+        html = ""
         try:
             async with session.get(self.url, timeout=20) as resp:
                 html = await resp.text()
         except Exception as e:
-            # Keep previous data if request fails
-            html = ""
+            _LOGGER.warning("EnergyUA request failed: %s", e)
 
         if html:
             soup = BeautifulSoup(html, "html.parser")
@@ -59,21 +56,21 @@ class EnergyUACoordinator(DataUpdateCoordinator):
                     if not m:
                         continue
                     start_s, end_s = m.group(1), m.group(2)
-                    # Build aware datetimes in local timezone today
-                    tz = dt_util.get_time_zone(str(self.hass.config.time_zone)) if self.hass.config.time_zone else dt_util.DEFAULT_TIME_ZONE
-                    today = dt_util.now(tz).date()
-                    sdt = dt_util.as_local(dt_util.parse_datetime(f"{today} {start_s}:00"))
-                    edt = dt_util.as_local(dt_util.parse_datetime(f"{today} {end_s}:00"))
+                    try:
+                        sh, sm = [int(x) for x in start_s.split(":")]
+                        eh, em = [int(x) for x in end_s.split(":")]
+                    except Exception:
+                        continue
+                    now = dt_util.now()  # aware in HA local timezone
+                    sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+                    edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
                     if edt < sdt:
-                        # Cross midnight → end is next day
                         edt = edt + timedelta(days=1)
                     periods.append({"start": sdt, "end": edt, "text": text})
 
-        # Compute states
         nowdt = dt_util.now()
         in_outage = False
         next_change = None
-        # Is now inside any period?
         for p in periods:
             s, e = p["start"], p["end"]
             if s <= nowdt <= e:
@@ -81,11 +78,11 @@ class EnergyUACoordinator(DataUpdateCoordinator):
                 next_change = e
                 break
         if not in_outage:
-            # Next start
             for p in periods:
                 s = p["start"]
                 if s > nowdt and (next_change is None or s < next_change):
                     next_change = s
+
         minutes_until = -1
         countdown_hm = "unknown"
         next_type = None

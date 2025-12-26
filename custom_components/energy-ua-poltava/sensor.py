@@ -35,7 +35,6 @@ class EnergyUAMinutesSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         periods = self.coordinator.data.get("periods", [])
-        # Convert to human-readable
         periods_txt = [p.get("text") for p in periods]
         return {
             ATTR_COUNTDOWN_HM: self.coordinator.data.get("countdown_hm"),

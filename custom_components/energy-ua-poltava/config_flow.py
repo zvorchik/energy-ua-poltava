@@ -21,7 +21,6 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            # Single instance by URL key
             await self.async_set_unique_id(user_input[CONF_URL])
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title="EnergyUA Schedule", data=user_input)
