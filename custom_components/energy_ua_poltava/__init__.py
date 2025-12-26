@@ -5,14 +5,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .coordinator import EnergyUATimerCoordinator
+from .coordinator import EnergyUAPeriodsCoordinator
 
 PLATFORMS = ["sensor", "binary_sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # Coordinator is created in platform setup to pass session, but keep domain storage
+    # створимо координатор у платформі, тут лише форвардинг
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
-    # Forward platforms; compat for 2022.5.x
     if hasattr(hass.config_entries, "async_forward_entry_setups"):
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     else:
