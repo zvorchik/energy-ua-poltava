@@ -1,8 +1,10 @@
 
 from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+
 from .const import (
     DOMAIN,
     CONF_URL,
@@ -15,6 +17,7 @@ from .const import (
 
 class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
     async def async_step_user(self, user_input=None):
         if user_input is not None:
             await self.async_set_unique_id(user_input[CONF_URL])
@@ -34,8 +37,10 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         self.config_entry = config_entry
+
     async def async_step_init(self, user_input=None):
         return await self.async_step_options(user_input)
+
     async def async_step_options(self, user_input=None):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
