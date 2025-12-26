@@ -1,7 +1,7 @@
 {
   "domain": "energy_ua_poltava",
   "name": "EnergyUA Schedule",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://example.com/energy-ua-poltava",
   "requirements": [
     "beautifulsoup4==4.12.3"
