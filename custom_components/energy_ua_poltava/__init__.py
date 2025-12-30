@@ -9,7 +9,6 @@ from .const import DOMAIN
 PLATFORMS = ["sensor", "binary_sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # створимо координатор у платформі, тут лише форвардинг
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
     if hasattr(hass.config_entries, "async_forward_entry_setups"):
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

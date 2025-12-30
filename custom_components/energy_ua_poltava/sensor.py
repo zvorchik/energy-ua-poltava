@@ -7,17 +7,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, ATTR_COUNTDOWN_HM, ATTR_NEXT_CHANGE_TYPE
 from .coordinator import EnergyUAPeriodsCoordinator
 
-
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = EnergyUAPeriodsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id] = coordinator
-
     async_add_entities([
         EnergyUAMinutesSensor(coordinator, entry.entry_id),
         EnergyUACountdownSensor(coordinator, entry.entry_id),
     ])
-
 
 class EnergyUAMinutesSensor(CoordinatorEntity[EnergyUAPeriodsCoordinator], SensorEntity):
     _attr_name = "EnergyUA Minutes Until Next Change"
@@ -42,7 +39,6 @@ class EnergyUAMinutesSensor(CoordinatorEntity[EnergyUAPeriodsCoordinator], Senso
             ATTR_NEXT_CHANGE_TYPE: self.coordinator.data.get("next_change_type"),
             "source_url": self.coordinator.data.get("source_url"),
         }
-
 
 class EnergyUACountdownSensor(CoordinatorEntity[EnergyUAPeriodsCoordinator], SensorEntity):
     _attr_name = "EnergyUA Countdown"

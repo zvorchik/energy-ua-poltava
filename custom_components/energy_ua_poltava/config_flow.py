@@ -15,7 +15,6 @@ from .const import (
     DEFAULT_PRETRIGGER_MINUTES,
 )
 
-
 class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -30,11 +29,6 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PRETRIGGER_MINUTES, default=DEFAULT_PRETRIGGER_MINUTES): vol.All(int, vol.Range(min=1, max=180)),
         })
         return self.async_show_form(step_id="user", data_schema=schema)
-
-    @callback
-    def async_get_options_flow(config_entry):
-        return EnergyUAOptionsFlowHandler(config_entry)
-
 
 class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
@@ -52,3 +46,7 @@ class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
             vol.Required(CONF_PRETRIGGER_MINUTES, default=options.get(CONF_PRETRIGGER_MINUTES, DEFAULT_PRETRIGGER_MINUTES)): vol.All(int, vol.Range(min=1, max=180)),
         })
         return self.async_show_form(step_id="options", data_schema=schema)
+
+@callback
+def async_get_options_flow(config_entry):
+    return EnergyUAOptionsFlowHandler(config_entry)

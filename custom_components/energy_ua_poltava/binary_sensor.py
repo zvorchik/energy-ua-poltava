@@ -7,14 +7,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import EnergyUAPeriodsCoordinator
 
-
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
         EnergyUAPowerState(coordinator, entry.entry_id),
         EnergyUAPretrigger(coordinator, entry.entry_id),
     ])
-
 
 class EnergyUAPowerState(CoordinatorEntity[EnergyUAPeriodsCoordinator], BinarySensorEntity):
     _attr_name = "EnergyUA Power State Now"
@@ -31,7 +29,6 @@ class EnergyUAPowerState(CoordinatorEntity[EnergyUAPeriodsCoordinator], BinarySe
     @property
     def is_on(self):
         return not self.coordinator.data.get("in_outage")
-
 
 class EnergyUAPretrigger(CoordinatorEntity[EnergyUAPeriodsCoordinator], BinarySensorEntity):
     _attr_name = "EnergyUA Pretrigger"

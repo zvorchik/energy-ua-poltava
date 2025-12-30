@@ -14,7 +14,6 @@ CONF_PRETRIGGER_MINUTES = "pretrigger_minutes"
 ATTR_COUNTDOWN_HM = "countdown_hm"
 ATTR_NEXT_CHANGE_TYPE = "next_change_type"
 
-# User-Agent для запроса к сайту
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
