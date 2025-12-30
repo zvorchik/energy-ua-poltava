@@ -1,15 +1,11 @@
+
 {
   "domain": "energy_ua_poltava",
   "name": "EnergyUA Schedule",
-  "version": "0.5.0",
-  "documentation": "https://example.com/energy-ua-poltava",
-  "requirements": [
-    "beautifulsoup4==4.12.3"
-  ],
-  "codeowners": [
-    "@yourname"
-  ],
-  "config_flow": true,
-  "iot_class": "cloud_polling",
-  "homeassistant": "2022.5.0"
+  "version": "0.1.2",
+  "documentation": "",
+  "requirements": ["beautifulsoup4"],
+  "dependencies": [],
+  "codeowners": ["@custom"],
+  "iot_class": "cloud_polling"
 }

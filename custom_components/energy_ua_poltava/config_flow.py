@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_PRETRIGGER_MINUTES,
 )
 
+
 class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -33,6 +34,7 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         return EnergyUAOptionsFlowHandler(config_entry)
+
 
 class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
