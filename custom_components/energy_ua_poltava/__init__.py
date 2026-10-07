@@ -15,7 +15,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = EnergyUAPeriodsCoordinator(hass, entry)
     # Не async_config_entry_first_refresh: якщо сайт недоступний (Cloudflare),
     # HA повторював би налаштування кожну хвилину-дві. Так сутності будуть
-    # unavailable, а наступна спроба — за RETRY_INTERVAL.
+    # unavailable до наступної планової спроби або натискання кнопки.
     await coordinator.async_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 

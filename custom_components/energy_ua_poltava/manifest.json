@@ -2,7 +2,7 @@
 {
   "domain": "energy_ua_poltava",
   "name": "EnergyUA Schedule",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "documentation": "",
   "requirements": ["beautifulsoup4"],
   "dependencies": [],

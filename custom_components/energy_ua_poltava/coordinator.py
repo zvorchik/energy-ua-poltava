@@ -16,8 +16,11 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
     DEFAULT_BASE_URL,
+    DEFAULT_AUTO_UPDATE,
     DEFAULT_PRETRIGGER_MINUTES,
     DEFAULT_SCAN_MINUTES,
+    MIN_SCAN_MINUTES,
+    CONF_AUTO_UPDATE,
     CONF_GROUP,
     CONF_SCAN_INTERVAL,
     CONF_PRETRIGGER_MINUTES,
@@ -28,29 +31,24 @@ from .schedule import Period, ScheduleParseError, compute, parse_schedule
 _LOGGER = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 20
-# Після невдалого запиту (Cloudflare, мережа) пробуємо знову раніше за scan_minutes,
-# але не частіше ніж раз на пів години, щоб не довбати сайт.
-RETRY_INTERVAL = timedelta(minutes=30)
 
 
 class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
-    """Графік тягнемо раз на scan_minutes, таймер перераховуємо щохвилини локально."""
+    """Графік тягнемо при старті, далі раз на scan_minutes (якщо auto_update)
+    або кнопкою; таймер перераховуємо щохвилини локально."""
 
     def __init__(self, hass: HomeAssistant, entry):
         self.entry = entry
+        conf = {**entry.data, **entry.options}
 
-        self.group: str = entry.data.get(CONF_GROUP)
-        self.scan_min = int(
-            entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL))
-            or DEFAULT_SCAN_MINUTES
+        self.group: str = conf.get(CONF_GROUP)
+        self.scan_min = max(
+            MIN_SCAN_MINUTES, int(conf.get(CONF_SCAN_INTERVAL) or DEFAULT_SCAN_MINUTES)
         )
-        self.pretrigger_min = int(
-            entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
-            or DEFAULT_PRETRIGGER_MINUTES
-        )
+        self.pretrigger_min = int(conf.get(CONF_PRETRIGGER_MINUTES) or DEFAULT_PRETRIGGER_MINUTES)
+        self.auto_update = bool(conf.get(CONF_AUTO_UPDATE, DEFAULT_AUTO_UPDATE))
 
         self.url = f"{DEFAULT_BASE_URL}{self.group}"
-        self._scan_interval = timedelta(minutes=self.scan_min)
 
         self._periods: List[Period] = []
         self._last_success: Optional[datetime] = None
@@ -60,7 +58,8 @@ class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=self._scan_interval,
+            # None — сайт питаємо лише при старті й кнопкою "Fetch schedule"
+            update_interval=timedelta(minutes=self.scan_min) if self.auto_update else None,
         )
 
     @callback
@@ -88,17 +87,16 @@ class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
             html = await self._async_fetch()
             periods = parse_schedule(html, dt_util.now())
         except (aiohttp.ClientError, asyncio.TimeoutError, ScheduleParseError) as err:
-            self.update_interval = min(RETRY_INTERVAL, self._scan_interval)
             if self._last_success is None:
                 raise UpdateFailed(f"EnergyUA: не вдалося отримати графік: {err}") from err
-            # Лишаємо попередній графік: час у ньому абсолютний, таймер далі рахує
+            # Лишаємо попередній графік: час у ньому абсолютний, таймер далі рахує.
+            # Наступна спроба — за звичайним інтервалом або кнопкою.
             _LOGGER.warning(
                 "EnergyUA: графік не оновився (%s), лишаю отриманий %s", err, self._last_success
             )
         else:
             self._periods = periods
             self._last_success = dt_util.now()
-            self.update_interval = self._scan_interval
         return self._build_data(dt_util.now())
 
     async def _async_fetch(self) -> str:

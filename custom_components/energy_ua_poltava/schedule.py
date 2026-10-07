@@ -24,7 +24,7 @@ OUTAGE_STATUSES = ("red", "yellow")
 # щоб таймер не показував "світло через 1 хв" посеред суцільного відключення.
 MERGE_GAP = timedelta(minutes=1)
 
-NO_OUTAGES_TEXT = "Немає відключень"
+NO_OUTAGES_TEXT = "Відключень немає"
 
 TODAY_JS_RE = re.compile(r"\bconst\s+periods\s*=\s*")
 TOMORROW_JS_RE = re.compile(r"\btomorrowPeriods\s*=\s*(?:Object\.values\(\s*)?")

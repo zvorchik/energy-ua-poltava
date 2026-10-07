@@ -7,13 +7,31 @@ from homeassistant.core import callback
 
 from .const import (
     DOMAIN,
+    CONF_AUTO_UPDATE,
     CONF_GROUP,
     CONF_SCAN_INTERVAL,
     CONF_PRETRIGGER_MINUTES,
+    DEFAULT_AUTO_UPDATE,
     DEFAULT_GROUP,
     DEFAULT_SCAN_MINUTES,
     DEFAULT_PRETRIGGER_MINUTES,
+    MIN_SCAN_MINUTES,
 )
+
+
+def _polling_schema(current: dict) -> dict:
+    scan = max(MIN_SCAN_MINUTES, int(current.get(CONF_SCAN_INTERVAL) or DEFAULT_SCAN_MINUTES))
+    return {
+        vol.Required(CONF_AUTO_UPDATE, default=current.get(CONF_AUTO_UPDATE, DEFAULT_AUTO_UPDATE)): bool,
+        vol.Required(CONF_SCAN_INTERVAL, default=scan): vol.All(
+            int, vol.Range(min=MIN_SCAN_MINUTES, max=1440)
+        ),
+        vol.Required(
+            CONF_PRETRIGGER_MINUTES,
+            default=current.get(CONF_PRETRIGGER_MINUTES, DEFAULT_PRETRIGGER_MINUTES),
+        ): vol.All(int, vol.Range(min=1, max=180)),
+    }
+
 
 class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -31,10 +49,10 @@ class EnergyUAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title="EnergyUA Schedule", data=user_input)
         schema = vol.Schema({
             vol.Required(CONF_GROUP, default=DEFAULT_GROUP): str,
-            vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_MINUTES): vol.All(int, vol.Range(min=1, max=1440)),
-            vol.Required(CONF_PRETRIGGER_MINUTES, default=DEFAULT_PRETRIGGER_MINUTES): vol.All(int, vol.Range(min=1, max=180)),
+            **_polling_schema({}),
         })
         return self.async_show_form(step_id="user", data_schema=schema)
+
 
 class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
@@ -48,8 +66,4 @@ class EnergyUAOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
         current = {**self._entry.data, **self._entry.options}
-        schema = vol.Schema({
-            vol.Required(CONF_SCAN_INTERVAL, default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_MINUTES)): vol.All(int, vol.Range(min=1, max=1440)),
-            vol.Required(CONF_PRETRIGGER_MINUTES, default=current.get(CONF_PRETRIGGER_MINUTES, DEFAULT_PRETRIGGER_MINUTES)): vol.All(int, vol.Range(min=1, max=180)),
-        })
-        return self.async_show_form(step_id="options", data_schema=schema)
+        return self.async_show_form(step_id="options", data_schema=vol.Schema(_polling_schema(current)))
