@@ -76,6 +76,8 @@ class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
 
     @callback
     def _handle_tick(self, _now) -> None:
+        if self._last_success is None:
+            return
         # Не async_set_updated_data: він щоразу відкладає планове оновлення
         # на update_interval, і при хвилинному тіку сайт не опитувався б ніколи.
         self.data = self._build_data(dt_util.now())
@@ -86,13 +88,13 @@ class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
             html = await self._async_fetch()
             periods = parse_schedule(html, dt_util.now())
         except (aiohttp.ClientError, asyncio.TimeoutError, ScheduleParseError) as err:
+            self.update_interval = min(RETRY_INTERVAL, self._scan_interval)
             if self._last_success is None:
                 raise UpdateFailed(f"EnergyUA: не вдалося отримати графік: {err}") from err
             # Лишаємо попередній графік: час у ньому абсолютний, таймер далі рахує
             _LOGGER.warning(
                 "EnergyUA: графік не оновився (%s), лишаю отриманий %s", err, self._last_success
             )
-            self.update_interval = min(RETRY_INTERVAL, self._scan_interval)
         else:
             self._periods = periods
             self._last_success = dt_util.now()

@@ -13,7 +13,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Координатор створюється тут, а не в sensor.py: інакше binary_sensor міг
     # піднятися раніше і не знайти його в hass.data.
     coordinator = EnergyUAPeriodsCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    # Не async_config_entry_first_refresh: якщо сайт недоступний (Cloudflare),
+    # HA повторював би налаштування кожну хвилину-дві. Так сутності будуть
+    # unavailable, а наступна спроба — за RETRY_INTERVAL.
+    await coordinator.async_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     coordinator.start_tick()
