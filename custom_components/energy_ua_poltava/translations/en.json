@@ -1,1 +1,29 @@
-{"title": "EnergyUA Schedule"}
+{
+  "title": "EnergyUA Schedule",
+  "config": {
+    "step": {
+      "user": {
+        "title": "EnergyUA Schedule",
+        "data": {
+          "group": "Queue (e.g. 3-1)",
+          "scan_minutes": "Refresh interval, min",
+          "pretrigger_minutes": "Pretrigger, min before change"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This queue is already added"
+    }
+  },
+  "options": {
+    "step": {
+      "options": {
+        "title": "EnergyUA settings",
+        "data": {
+          "scan_minutes": "Refresh interval, min",
+          "pretrigger_minutes": "Pretrigger, min before change"
+        }
+      }
+    }
+  }
+}

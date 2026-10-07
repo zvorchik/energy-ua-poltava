@@ -1,32 +1,39 @@
 
-# EnergyUA Schedule (Полтава) — HACS інтеграція (періоди з сайту)
 
-**Парсинг тільки з блоку "Періоди відключень на сьогодні"** на сторінці `https://energy-ua.info/cherga/<group>`.
-Жодних JS-таймерів: інтеграція бере часи безпосередньо зі статичного контенту сторінки.
+# EnergyUA Schedule (Полтава) — HACS інтеграція
+
+Графік відключень з `https://energy-ua.info/cherga/<group>`: таймер до наступної зміни, стан світла за графіком і претригер.
 
 ## Як працює парсер
-1. Шукає контейнер `div.periods_items` і всередині кожного `<span>` бере **перші два `<b>`** як `start/end`.
-2. Якщо контейнера немає → бере **повний текст сторінки** та шукає всі співпадіння за шаблоном:
-   `З HH:MM до HH:MM` (регекс толерує пробіли/переноси рядків).
-3. Коректно обробляє періоди, що переходять через північ.
+1. Основне джерело — дані, які сторінка передає своєму JS-графіку: `const periods = [...]` (сьогодні) і `tomorrowPeriods` (завтра).
+   Час там в unix-секундах, тому дата, перехід через північ і переведення годинника враховані.
+   Статуси `red` (немає світла) і `yellow` (можливе відключення) рахуються як відключення.
+2. Якщо JS-даних немає — блоки `div.periods_items` («З HH:MM до HH:MM»), окремо для «сьогодні» і «завтра».
+3. Сусідні періоди (22:00–24:00 + 00:00–02:00) зливаються в одне відключення.
+4. Якщо сайт недоступний або віддав заглушку Cloudflare — лишається попередній графік, повтор через 30 хв.
+
+Сторінка опитується раз на **scan interval**; таймер перераховується локально рівно о :00 кожної хвилини.
 
 ## Встановлення через HACS
-1. Помістіть вміст цього архіву у Git-репозиторій (рекомендований slug: `energy-ua-poltava`).
-2. В HA → HACS → Integrations → `⋮` → **Custom repositories** → додайте URL вашого репозиторію (Type: **Integration**).
-3. Встановіть **EnergyUA Schedule** із HACS.
-4. У HA: **Settings → Devices & Services → Add Integration** → знайдіть **EnergyUA Schedule**.
+1. HACS → Integrations → `⋮` → **Custom repositories** → URL цього репозиторію (Type: **Integration**).
+2. Встановіть **EnergyUA Schedule** із HACS і перезапустіть Home Assistant.
+3. **Settings → Devices & Services → Add Integration** → **EnergyUA Schedule**.
 
-## Налаштування (UI)
-- **Group**: наприклад `3-1`.
-- **Scan interval (minutes)**: інтервал опитування.
-- **Pretrigger minutes**: хвилини для претригера.
+## Налаштування
+- **Group** — черга, наприклад `3-1`.
+- **Scan interval (minutes)** — як часто тягнути графік з сайту.
+- **Pretrigger minutes** — за скільки хвилин до зміни вмикати претригер.
+
+Інтервал і претригер можна змінити пізніше: інтеграція → **Налаштувати**.
 
 ## Сутності
-- `sensor.energyua_minutes_until_next_change` — хвилини до найближчої зміни.
-  - атрибути: `countdown_hm` (HH:MM), `next_change_type` (`off`/`on`), `source_url`.
-- `sensor.energyua_countdown_hm` — строка HH:MM.
-- `binary_sensor.energyua_power_state_now` — чи є світло зараз (`on`/`off`).
-- `binary_sensor.energyua_pretrigger` — `on` рівно за N хвилин до зміни.
+- `sensor.energyua_minutes_until_next_change` — хвилини до найближчої зміни; `unknown`, якщо на сьогодні й завтра відключень більше немає.
+  - атрибути: `countdown_hm`, `next_change_type` (`off` — світло зникне, `on` — з'явиться), `next_change`, `periods`, `last_success`, `source_url`.
+- `sensor.energyua_countdown` — рядок `HH:MM` або «Немає відключень».
+- `sensor.energyua_next_change` — момент наступної зміни (timestamp); підходить для `trigger: time` з `offset`.
+- `binary_sensor.energyua_power_state_now` — чи є світло за графіком.
+- `binary_sensor.energyua_pretrigger` — `on` за N хвилин до **будь-якої** зміни; напрямок в атрибуті `next_change_type`.
+- `button.reload_energyua_poltava` — перезавантажити інтеграцію.
 
 ## Сумісність
-- Перевірено на **Home Assistant 2022.5.x**: є фолбек до старого API `async_forward_entry_setup`.
+Перевірено на Home Assistant 2025.11. Лишились фолбеки на старе API (`async_forward_entry_setup`).

@@ -1,142 +1,116 @@
 
 from __future__ import annotations
 
-import re
+import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from bs4 import BeautifulSoup
-from homeassistant.core import HomeAssistant
+import aiohttp
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
     DEFAULT_BASE_URL,
+    DEFAULT_PRETRIGGER_MINUTES,
+    DEFAULT_SCAN_MINUTES,
     CONF_GROUP,
     CONF_SCAN_INTERVAL,
     CONF_PRETRIGGER_MINUTES,
-    ATTR_COUNTDOWN_HM,
-    ATTR_NEXT_CHANGE_TYPE,
     USER_AGENT,
 )
+from .schedule import Period, ScheduleParseError, compute, parse_schedule
 
 _LOGGER = logging.getLogger(__name__)
 
-PERIOD_RE = re.compile(r"З\s*(\d{1,2}:\d{2})\s*до\s*(\d{1,2}:\d{2})", re.IGNORECASE)
+REQUEST_TIMEOUT = 20
+# Після невдалого запиту (Cloudflare, мережа) пробуємо знову раніше за scan_minutes,
+# але не частіше ніж раз на пів години, щоб не довбати сайт.
+RETRY_INTERVAL = timedelta(minutes=30)
 
 
 class EnergyUAPeriodsCoordinator(DataUpdateCoordinator):
-    """Парсинг по scan_minutes и локальный хвилинний таймер."""
+    """Графік тягнемо раз на scan_minutes, таймер перераховуємо щохвилини локально."""
 
     def __init__(self, hass: HomeAssistant, entry):
-        self.hass = hass
         self.entry = entry
 
         self.group: str = entry.data.get(CONF_GROUP)
-        self.scan_min: int = entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL))
-        self.pretrigger_min: int = entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
+        self.scan_min = int(
+            entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL))
+            or DEFAULT_SCAN_MINUTES
+        )
+        self.pretrigger_min = int(
+            entry.options.get(CONF_PRETRIGGER_MINUTES, entry.data.get(CONF_PRETRIGGER_MINUTES))
+            or DEFAULT_PRETRIGGER_MINUTES
+        )
 
         self.url = f"{DEFAULT_BASE_URL}{self.group}"
+        self._scan_interval = timedelta(minutes=self.scan_min)
 
-        self._periods: List[Dict[str, Any]] = []
+        self._periods: List[Period] = []
+        self._last_success: Optional[datetime] = None
         self._unsub_tick = None
 
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=self.scan_min or 15),
+            update_interval=self._scan_interval,
         )
 
-    async def async_config_entry_first_refresh(self) -> None:
-        await super().async_config_entry_first_refresh()
-        self._unsub_tick = async_track_time_interval(
-            self.hass, self._recompute_and_notify, timedelta(minutes=1)
-        )
+    @callback
+    def start_tick(self) -> None:
+        # Рівно о :00 кожної хвилини, щоб pretrigger спрацьовував точно за N хвилин
+        self._unsub_tick = async_track_time_change(self.hass, self._handle_tick, second=0)
+
+    @callback
+    def stop_tick(self) -> None:
+        if self._unsub_tick is not None:
+            self._unsub_tick()
+            self._unsub_tick = None
+
+    @callback
+    def _handle_tick(self, _now) -> None:
+        # Не async_set_updated_data: він щоразу відкладає планове оновлення
+        # на update_interval, і при хвилинному тіку сайт не опитувався б ніколи.
+        self.data = self._build_data(dt_util.now())
+        self.async_update_listeners()
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        session = async_get_clientsession(self.hass)
-        html = ""
-        periods_raw: List[Dict[str, Any]] = []
         try:
-            async with session.get(self.url, headers={"User-Agent": USER_AGENT}, timeout=20) as resp:
-                html = await resp.text()
-        except Exception as e:
-            _LOGGER.warning("EnergyUA request failed: %s", e)
+            html = await self._async_fetch()
+            periods = parse_schedule(html, dt_util.now())
+        except (aiohttp.ClientError, asyncio.TimeoutError, ScheduleParseError) as err:
+            if self._last_success is None:
+                raise UpdateFailed(f"EnergyUA: не вдалося отримати графік: {err}") from err
+            # Лишаємо попередній графік: час у ньому абсолютний, таймер далі рахує
+            _LOGGER.warning(
+                "EnergyUA: графік не оновився (%s), лишаю отриманий %s", err, self._last_success
+            )
+            self.update_interval = min(RETRY_INTERVAL, self._scan_interval)
+        else:
+            self._periods = periods
+            self._last_success = dt_util.now()
+            self.update_interval = self._scan_interval
+        return self._build_data(dt_util.now())
 
-        if html:
-            soup = BeautifulSoup(html, "html.parser")
-            cont = soup.select_one("div.periods_items")
-            if cont:
-                for sp in cont.find_all("span"):
-                    b_tags = sp.find_all("b")
-                    if len(b_tags) >= 2:
-                        start_s = b_tags[0].get_text(strip=True)
-                        end_s = b_tags[1].get_text(strip=True)
-                        periods_raw.append({"start": start_s, "end": end_s, "text": sp.get_text(" ", strip=True)})
-            if not periods_raw:
-                text = soup.get_text(" ", strip=True)
-                for m in PERIOD_RE.finditer(text):
-                    start_s, end_s = m.group(1), m.group(2)
-                    periods_raw.append({"start": start_s, "end": end_s, "text": f"З {start_s} до {end_s}"})
+    async def _async_fetch(self) -> str:
+        session = async_get_clientsession(self.hass)
+        async with session.get(
+            self.url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.text()
 
-        now = dt_util.now()
-        norm_periods: List[Dict[str, Any]] = []
-        for p in periods_raw:
-            try:
-                sh, sm = [int(x) for x in p["start"].split(":")]
-                eh, em = [int(x) for x in p["end"].split(":")]
-            except Exception:
-                continue
-            sdt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
-            edt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
-            if edt <= sdt:
-                edt = edt + timedelta(days=1)
-            norm_periods.append({"start": sdt, "end": edt, "text": p.get("text")})
-
-        self._periods = norm_periods
-        # немедленно пересчитать и отдать свежие значения таймера
-        return self._compute(now)
-
-    def _compute(self, now) -> Dict[str, Any]:
-        in_outage = False
-        next_change: Optional[Any] = None
-        for p in self._periods:
-            s, e = p["start"], p["end"]
-            if s <= now <= e:
-                in_outage = True
-                next_change = e
-                break
-        if not in_outage:
-            for p in self._periods:
-                s = p["start"]
-                if s > now and (next_change is None or s < next_change):
-                    next_change = s
-        minutes_until = -1
-        countdown_hm = "Неизвестно"
-        next_change_type = None
-        if next_change is not None:
-            minutes_until = int((next_change - now).total_seconds() // 60)
-            if minutes_until < 0:
-                minutes_until = 0
-            countdown_hm = f"{minutes_until//60:02d}:{minutes_until%60:02d}"
-            next_change_type = "on" if in_outage else "off"
-        pretrigger_on = minutes_until >= 0 and minutes_until <= int(self.pretrigger_min or 10)
-        return {
-            "periods": self._periods,
-            "in_outage": in_outage,
-            "minutes_until": minutes_until,
-            "countdown_hm": countdown_hm,
-            "next_change_type": next_change_type,
-            "pretrigger": pretrigger_on,
-            "source_url": self.url,
-        }
-
-    async def _recompute_and_notify(self, _now) -> None:
-        now = dt_util.now()
-        data = self._compute(now)
-        self.async_set_updated_data(data)
+    def _build_data(self, now: datetime) -> Dict[str, Any]:
+        data = compute(self._periods, now, self.pretrigger_min)
+        data["last_success"] = self._last_success
+        data["source_url"] = self.url
+        return data

@@ -1,1 +1,29 @@
-{"title": "Графік EnergyUA"}
+{
+  "title": "Графік EnergyUA",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Графік EnergyUA",
+        "data": {
+          "group": "Черга (наприклад 3-1)",
+          "scan_minutes": "Інтервал оновлення графіка, хв",
+          "pretrigger_minutes": "Претригер, хв до зміни"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Цю чергу вже додано"
+    }
+  },
+  "options": {
+    "step": {
+      "options": {
+        "title": "Налаштування EnergyUA",
+        "data": {
+          "scan_minutes": "Інтервал оновлення графіка, хв",
+          "pretrigger_minutes": "Претригер, хв до зміни"
+        }
+      }
+    }
+  }
+}
