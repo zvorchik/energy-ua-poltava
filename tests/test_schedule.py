@@ -26,6 +26,38 @@ HTML = '''<div class="timeline-inner" id="timelineInner">
 </div><div id="timeMarker"><span>Зараз 08:59</span></div></div>'''
 
 class ScheduleTests(unittest.TestCase):
+    def test_actual_server_response(self):
+        html = (ROOT / 'tests/fixtures/schedule_payload.html').read_text(encoding='utf-8')
+        self.assertEqual(schedule.parse_schedule(html, NOW), schedule.parse_schedule(HTML, NOW))
+
+    def test_payload_dates_tomorrow_and_midnight_merge(self):
+        import json
+        payload = {'today': [{'from': 1320, 'to': 1440, 'status': 'red'}],
+                   'tomorrow': [{'from': 0, 'to': 120, 'status': 'red'}],
+                   'tomorrowAvailable': True,
+                   'dates': {'today': '21.11.2026', 'tomorrow': '22.11.2026'}}
+        html = '<script id="schedulePayload" type="application/json">' + json.dumps(payload) + '</script>'
+        periods = schedule.parse_schedule(html, NOW)
+        self.assertEqual(len(periods), 1)
+        self.assertEqual(periods[0].start.astimezone(TZ), NOW.replace(day=21, hour=22, minute=0))
+        self.assertEqual(periods[0].end - periods[0].start, timedelta(hours=4))
+
+    def test_invalid_payload_never_falls_back(self):
+        import json
+        payload = json.loads(__import__('bs4').BeautifulSoup(
+            (ROOT / 'tests/fixtures/schedule_payload.html').read_text(encoding='utf-8'), 'html.parser'
+        ).find('script').get_text())
+        for patch in [{'today': []}, {'today': [{'from': -1, 'to': 1440, 'status': 'red'}]},
+                      {'dates': {}}, {'isEmergency': True}]:
+            with self.subTest(patch=patch), self.assertRaises(schedule.ScheduleParseError):
+                schedule.parse_schedule('<script id="schedulePayload">' + json.dumps({**payload, **patch}) + '</script>' + HTML, NOW)
+        with self.assertRaises(schedule.ScheduleParseError):
+            schedule.parse_schedule('<script id="schedulePayload">{broken}</script>' + HTML, NOW)
+
+    def test_payload_explicit_green_day(self):
+        html = '<script id="schedulePayload">{"today":[{"from":0,"to":1440,"status":"green"}],"dates":{"today":"20.11.2026"}}</script><div id="timelineTrack"></div>'
+        self.assertEqual(schedule.parse_schedule(html, NOW), [])
+
     def test_supplied_timeline(self):
         periods = schedule.parse_schedule(HTML, NOW)
         self.assertEqual([(p.start.astimezone(TZ).strftime('%H:%M'), p.end.astimezone(TZ).strftime('%H:%M')) for p in periods], [('04:00','05:30'), ('10:00','12:00'), ('16:00','19:00'), ('22:00','00:00')])

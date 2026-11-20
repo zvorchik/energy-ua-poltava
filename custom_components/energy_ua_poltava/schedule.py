@@ -53,11 +53,13 @@ class Period:
 
 def parse_schedule(html: str, now: datetime) -> List[Period]:
     """Періоди на сьогодні й завтра. `now` — локальний aware datetime."""
-    periods = _parse_js(html)
-    if not periods:
-        html_periods = _parse_html(html, now)
-        if html_periods is not None:
-            periods = html_periods
+    periods = _parse_payload(html, now)
+    if periods is None:
+        periods = _parse_js(html)
+        if not periods:
+            html_periods = _parse_html(html, now)
+            if html_periods is not None:
+                periods = html_periods
     if periods is None:
         raise ScheduleParseError("на сторінці немає графіка")
     # Всередині все в UTC: Python віднімає й порівнює aware-дати з однаковим
@@ -116,6 +118,44 @@ def compute(periods: List[Period], now: datetime, pretrigger_minutes: int) -> Di
         "countdown_hm": countdown_hm,
         "pretrigger": minutes_until is not None and minutes_until <= pretrigger_minutes,
     }
+
+
+def _parse_payload(html: str, now: datetime) -> Optional[List[Period]]:
+    """Новий сайт: JSON із датами та хвилинами від початку доби."""
+    script = BeautifulSoup(html, "html.parser").find("script", id="schedulePayload")
+    if script is None:
+        return None
+    try:
+        payload = json.loads(script.get_text())
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be an object")
+        if payload.get("isEmergency"):
+            raise ScheduleParseError("аварійні відключення: погодинний графік не визначає стан світла")
+        out: List[Period] = []
+        days = ["today"]
+        if payload.get("tomorrowAvailable") is True:
+            days.append("tomorrow")
+        for name in days:
+            day = datetime.strptime(payload["dates"][name], "%d.%m.%Y").date()
+            items = payload[name]
+            if not isinstance(items, list):
+                raise ValueError("periods must be an array")
+            if name == "today" and not items:
+                raise ScheduleParseError("schedulePayload: немає даних графіка на сьогодні")
+            for item in items:
+                start_min, end_min, status = item["from"], item["to"], item["status"]
+                if (type(start_min) is not int or type(end_min) is not int
+                        or not 0 <= start_min < end_min <= 1440
+                        or status not in ("red", "yellow", "green")):
+                    raise ValueError("invalid period")
+                if status not in OUTAGE_STATUSES:
+                    continue
+                start = _at(day, f"{start_min // 60}:{start_min % 60:02d}", now)
+                end = _at(day, f"{end_min // 60}:{end_min % 60:02d}", now)
+                out.append(Period(start, end, status))
+        return out
+    except (ValueError, TypeError, KeyError) as err:
+        raise ScheduleParseError("некоректні дані schedulePayload") from err
 
 
 def _parse_js(html: str) -> Optional[List[Period]]:
