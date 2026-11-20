@@ -30,6 +30,7 @@ TODAY_JS_RE = re.compile(r"\bconst\s+periods\s*=\s*")
 TOMORROW_JS_RE = re.compile(r"\btomorrowPeriods\s*=\s*(?:Object\.values\(\s*)?")
 PERIOD_TEXT_RE = re.compile(r"З\s*(\d{1,2}:\d{2})\s*до\s*(\d{1,2}:\d{2})", re.IGNORECASE)
 TOMORROW_TITLE_RE = re.compile(r"Відключення\s+завтра", re.IGNORECASE)
+TIMELINE_TIME_RE = re.compile(r"^(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*:")
 
 
 class ScheduleParseError(Exception):
@@ -53,8 +54,10 @@ class Period:
 def parse_schedule(html: str, now: datetime) -> List[Period]:
     """Періоди на сьогодні й завтра. `now` — локальний aware datetime."""
     periods = _parse_js(html)
-    if periods is None:
-        periods = _parse_html(html, now)
+    if not periods:
+        html_periods = _parse_html(html, now)
+        if html_periods is not None:
+            periods = html_periods
     if periods is None:
         raise ScheduleParseError("на сторінці немає графіка")
     # Всередині все в UTC: Python віднімає й порівнює aware-дати з однаковим
@@ -171,8 +174,23 @@ def _period_from_js(item: Any) -> Optional[Period]:
 
 
 def _parse_html(html: str, now: datetime) -> Optional[List[Period]]:
-    """Запасний варіант: список "З HH:MM до HH:MM" у блоках сьогодні/завтра."""
+    """Нова добова шкала або старі списки періодів сьогодні/завтра."""
     soup = BeautifulSoup(html, "html.parser")
+    timeline = soup.select_one("#timelineTrack")
+    if timeline is not None:
+        # У фрагменті без дати використовується сьогодні. На повній сторінці
+        # читаємо саме дату графіка, а не дату сусідньої вкладки «Завтра».
+        match = re.search(
+            r"(?:Дата графіка|Графік на дату)\s*(?:[А-Яа-яІіЇїЄєҐґ]+\.\s*)?(\d{2}\.\d{2}\.\d{4})",
+            soup.get_text(" ", strip=True),
+        )
+        day = now.date()
+        if match:
+            try:
+                day = datetime.strptime(match[1], "%d.%m.%Y").date()
+            except ValueError as err:
+                raise ScheduleParseError("некоректна дата добового графіка") from err
+        return _parse_timeline(timeline, day, now)
     titles = soup.select("h4.ch_day_title")
     containers = soup.select("div.periods_items")
     if not titles and not containers:
@@ -200,6 +218,26 @@ def _parse_html(html: str, now: datetime) -> Optional[List[Period]]:
             period = _period_from_hm(m.group(1), m.group(2), day, now)
             if period is not None:
                 out.append(period)
+    return out
+
+
+def _parse_timeline(timeline, day: date, now: datetime) -> List[Period]:
+    """Rendered timeline; an empty JS placeholder is not an outage-free day."""
+    segments = timeline.select(".timeline-segment")
+    if not segments:
+        raise ScheduleParseError("добовий графік порожній: немає даних про періоди")
+    out: List[Period] = []
+    for segment in segments:
+        classes = segment.get("class", [])
+        status = next((s for s in ("red", "yellow", "green") if f"status-{s}" in classes), None)
+        match = TIMELINE_TIME_RE.match(segment.get("title", ""))
+        if status is None or match is None:
+            raise ScheduleParseError("невідомий формат сегмента добового графіка")
+        period = _period_from_hm(match[1], match[2], day, now)
+        if period is None:
+            raise ScheduleParseError("некоректний час сегмента добового графіка")
+        if status in OUTAGE_STATUSES:
+            out.append(Period(period.start, period.end, status))
     return out
 
 
